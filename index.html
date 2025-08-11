@@ -7,10 +7,9 @@
   <title>港式台灣麻雀分析器 · 網頁版</title>
   <style>
     :root{
-      /* 統一麻雀字元大小（鍵盤按鈕 & 顯示區一致） */
-      --tile-size: clamp(20px, 5.6vw, 26px);
-      --gap: 8px;
-      --gap-small: 3px;   /* 再縮小讓更密 */
+      /* 放大回上一版尺寸（仍可單行） */
+      --tile-size: clamp(22px, 6vw, 28px);
+      --gap-small: 4px;
       --card-pad: 14px;
     }
 
@@ -34,15 +33,12 @@
       border-radius:16px; padding:var(--card-pad);
       box-shadow:0 10px 30px rgba(0,0,0,.25);
     }
-    .grid { display:grid; gap:12px; grid-template-columns:1fr; }
-    @media (min-width:900px){ .grid { grid-template-columns:1.1fr .9fr; } }
 
     .section-title{ font-size:12px; color:#fff; text-transform:uppercase; letter-spacing:.16em; margin:6px 0 8px; }
     .muted{ color:#fff; opacity:.9; }
     .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
 
     .field { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-    /* 縮短輸入欄模組，讓小手機不會擠爆 */
     input[type=text]{
       flex:1 1 260px; max-width:520px; min-width:160px;
       min-height:44px;
@@ -80,7 +76,7 @@
     .page{ display:none; }
     .page.active{ display:block; }
 
-    /* 鍵盤：固定 10 欄，盡量同一行；縮邊距以塞得下 */
+    /* 鍵盤：固定 10 欄，單行吃滿寬度 */
     .kbd{
       display:grid;
       grid-template-columns: repeat(10, 1fr);
@@ -88,8 +84,9 @@
     }
     .row { margin-top:8px; }
     .key{
-      text-align:center; padding:4px 0; /* 縮短麻雀與邊框距離 */
-      border-radius:8px;
+      display:flex; align-items:center; justify-content:center; /* 牌面置中 */
+      padding:6px 0;                      /* 放大回上一版 */
+      border-radius:10px;
       border:1px solid rgba(255,255,255,.18);
       background:#0e1a33; color:#fff;
       font-weight:800; font-size:var(--tile-size);
@@ -106,12 +103,11 @@
 
     .row-title { margin-top:8px; font-size:13px; opacity:.9; }
 
-    /* 放大「當前手牌」與「分析結果」的麻雀字元（與鍵盤一致） */
+    /* 顯示區的麻雀字元與鍵盤一致 */
     #unicodeHand, #result { font-size: var(--tile-size); line-height:1.55; white-space:pre-wrap; }
-    /* 分析結果旁的操作列 */
+
     .actions{ display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; }
 
-    /* 保底隱藏 chips */
     .chips{ display:none !important; }
   </style>
 </head>
@@ -134,7 +130,6 @@
           <div class="section-title">輸入手牌</div>
           <div class="field" style="margin-bottom:8px">
             <input id="tilesInput" type="text" inputmode="latin" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="輸入牌組或使用下方牌面鍵盤" />
-            <!-- 格式化按鈕已移除 -->
           </div>
           <div id="unicodeHand" class="muted" style="min-height:28px;margin-bottom:8px"></div>
 
@@ -152,7 +147,7 @@
           <div class="row-title">字</div>
           <div class="kbd row" id="row-z"></div>
 
-          <!-- 工具鍵：順序 清空｜空格｜退格；寬度=3 個一般鍵 -->
+          <!-- 工具鍵：清空｜空格｜退格；寬度=3 個一般鍵 -->
           <div class="kbd row tools">
             <button class="key util" id="keyClear">清空</button>
             <button class="key util" id="keySpace">空格</button>
@@ -160,7 +155,7 @@
           </div>
         </div>
 
-        <!-- 分析結果（自動分析後自動捲動到此並顯示操作按鈕） -->
+        <!-- 分析結果 -->
         <div class="card" style="margin-top:12px">
           <div class="section-title">分析結果</div>
           <div id="result" aria-live="polite"></div>
@@ -171,7 +166,7 @@
         </div>
       </section>
 
-      <!-- 頁面 2：規則（僅保留頂部「返回輸入」按鈕可返回） -->
+      <!-- 頁面 2：規則（不顯示自動分析按鈕） -->
       <section id="page-rules" class="page">
         <div class="card">
           <div class="section-title">規則</div>
@@ -182,13 +177,12 @@
               <li>可輸入「連串」或「空白分隔」格式</li>
             </ul>
           </div>
-          <!-- 已依要求移除「返回輸入頁面」按鈕 -->
         </div>
       </section>
 
     </div>
 
-    <div class="dock">
+    <div class="dock" id="dock">
       <div class="dock-inner">
         <!-- 僅保留自動分析 -->
         <button class="btn primary" id="btnCheck">自動分析</button>
@@ -203,7 +197,6 @@
 const SUITS=['m','t','s']; const HONORS=['1z','2z','3z','4z','5z','6z','7z']; const JOKER='X';
 const VALID_WIN=new Set([5,8,11,14,17]); const VALID_TING=new Set([4,7,10,13,16]);
 
-/* 5z 使用黑白樣式（變體選擇符 FE0E） */
 const UNICODE_TILES={
   '1m':'🀇','2m':'🀈','3m':'🀉','4m':'🀊','5m':'🀋','6m':'🀌','7m':'🀍','8m':'🀎','9m':'🀏',
   '1t':'🀙','2t':'🀚','3t':'🀛','4t':'🀜','5t':'🀝','6t':'🀞','7t':'🀟','8t':'🀠','9t':'🀡',
@@ -388,20 +381,23 @@ function analyzeDiscardToTing(hand){
 /* ======= UI glue ======= */
 const $=s=>document.querySelector(s);
 
-/* 頁面切換 */
+/* 頁面切換（規則頁隱藏自動分析區） */
 const pageMain = $('#page-main');
 const pageRules = $('#page-rules');
 const btnToRules = $('#btnToRules');
 const btnBackToMain = $('#btnBackToMain');
+const dock = $('#dock');
 
 function showMain(){
   pageMain.classList.add('active'); pageRules.classList.remove('active');
   btnBackToMain.style.display='none'; btnToRules.style.display='';
+  dock.style.display='';                         // 顯示自動分析按鈕
   window.scrollTo({top:0, behavior:'smooth'});
 }
 function showRules(){
   pageRules.classList.add('active'); pageMain.classList.remove('active');
   btnBackToMain.style.display=''; btnToRules.style.display='none';
+  dock.style.display='none';                     // 規則頁隱藏自動分析
   window.scrollTo({top:0, behavior:'smooth'});
 }
 btnToRules.addEventListener('click', showRules);
@@ -417,7 +413,6 @@ function setResult(t){ resultEl.textContent=t }
 function setUnicodeHand(arr){
   unicodeHandEl.innerHTML = arr.length ? ('當前手牌： ' + formatHand(arr)) : '';
 }
-function showToast(msg){ toast.textContent=msg; toast.classList.add('show'); setTimeout(()=>toast.classList.remove('show'), 1600) }
 function insertText(t){ const cur=tilesInput.value; tilesInput.value=(cur?cur.replace(/\s+$/,'')+' ':'')+t; fireFormat(false) }
 
 /* 建鍵盤 */
@@ -441,13 +436,13 @@ document.getElementById('keyClear').addEventListener('click',()=>{ tilesInput.va
 document.getElementById('keySpace').addEventListener('click',()=>{ tilesInput.value = tilesInput.value.replace(/\s*$/, ' ') })
 document.getElementById('keyBack').addEventListener('click',()=>{ tilesInput.value = tilesInput.value.trimEnd().replace(/\S+\s*$|.$/,''); fireFormat(false) })
 
-/* 即時格式化（保留體驗；格式化按鈕已移除） */
-function fireFormat(withToast=true){
+/* 即時格式化（保留體驗） */
+function fireFormat(){
   try{ const tiles=parseTiles(tilesInput.value); setUnicodeHand(tiles); }
   catch(e){ /* 輸入中暫不提示錯誤 */ }
 }
 
-/* 自動分析（唯一功能）：完成後自動捲到分析結果並顯示操作鈕 */
+/* 自動分析：完成後捲到分析結果並顯示操作鈕 */
 document.getElementById('btnCheck').addEventListener('click',()=>{
   try{
     const tiles=parseTiles(tilesInput.value); const n=tiles.length; setUnicodeHand(tiles);
@@ -471,7 +466,6 @@ document.getElementById('btnCheck').addEventListener('click',()=>{
       setResult('錯誤：牌張數不合法（小相公/大相公）。');
     }
 
-    // 顯示「修改 / 重新輸入」並捲動至結果
     actionsEl.style.display='';
     document.getElementById('result').scrollIntoView({ behavior:'smooth', block:'start' });
 
@@ -481,21 +475,17 @@ document.getElementById('btnCheck').addEventListener('click',()=>{
   }
 });
 
-/* 分析結果旁的操作按鈕（不限制輸入方式） */
+/* 分析結果旁的操作按鈕 —— 手機不彈出鍵盤（移除 focus/選取） */
 document.getElementById('btnEdit').addEventListener('click',()=>{
-  showMain();            // 回到輸入頁
-  tilesInput.focus();    // 讓用家選擇鍵盤或快速鍵盤
-  tilesInput.setSelectionRange(tilesInput.value.length, tilesInput.value.length);
+  showMain();            // 回到輸入頁，不主動 focus
 });
-
 document.getElementById('btnReenter').addEventListener('click',()=>{
   tilesInput.value='';   // 清空
   setUnicodeHand([]); setResult(''); actionsEl.style.display='none';
-  showMain();            // 回到輸入頁
-  tilesInput.focus();    // 任選輸入方式
+  showMain();            // 回到輸入頁，不主動 focus
 });
 
-/* 取消雙擊放大（程式層面，保險起見） */
+/* 取消雙擊放大（保險） */
 let lastTouchEnd = 0;
 document.addEventListener('touchend', function (e) {
   const now = Date.now();
@@ -504,7 +494,10 @@ document.addEventListener('touchend', function (e) {
 }, { passive:false });
 
 /* 輸入時延遲格式化 */
-let typingTimer; tilesInput.addEventListener('input',()=>{ clearTimeout(typingTimer); typingTimer=setTimeout(()=>fireFormat(false), 120) })
+let typingTimer; 
+document.getElementById('tilesInput').addEventListener('input',()=>{
+  clearTimeout(typingTimer); typingTimer=setTimeout(()=>fireFormat(), 120)
+});
 </script>
 </body>
 </html>
