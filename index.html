@@ -305,7 +305,6 @@ function isSequence(trio){
   const nums=trio.map(t=>parseInt(t[0],10)).sort((a,b)=>a-b);
   return nums[2]-nums[0]===2 && nums[1]-nums[0]===1
 }
-const SUITS=['m','t','s']; const HONORS=['1z','2z','3z','4z','5z','6z','7z']; const JOKER='X';
 function allTiles(){ return [...SUITS.flatMap(s=>Array.from({length:9},(_,i)=>`${i+1}${s}`)), ...HONORS] }
 function substituteJokers(tiles){
   const j=tiles.filter(t=>t==='X').length; const base=tiles.filter(t=>t!=='X'); if(j===0) return [tiles];
