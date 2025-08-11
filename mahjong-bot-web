@@ -1,0 +1,424 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>港式台灣麻雀分析器 · 網頁版</title>
+  <style>
+    /* 基本配色（全部白字） */
+    html, body { height:100%; }
+    body {
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Noto Sans, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      color:#fff;
+      background: radial-gradient(1200px 800px at 10% 10%, #0f1a33 10%, #0b1220 60%);
+    }
+    .wrap { min-height:100dvh; display:flex; flex-direction:column; }
+    .container { width:100%; max-width:980px; margin:0 auto; padding:16px clamp(12px,4vw,20px) 96px; box-sizing:border-box; }
+
+    .title { font-size:clamp(20px,4.8vw,28px); font-weight:800; letter-spacing:.3px; }
+    .card { background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02)); border:1px solid rgba(255,255,255,.12); border-radius:16px; padding:14px; box-shadow:0 10px 30px rgba(0,0,0,.25); }
+    .grid { display:grid; gap:12px; grid-template-columns:1fr; }
+    @media (min-width:900px){ .grid { grid-template-columns:1.1fr .9fr; } }
+
+    .section-title{ font-size:12px; color:#fff; text-transform:uppercase; letter-spacing:.16em; margin:6px 0 8px; }
+    .muted{ color:#fff; opacity:.9; }
+    .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .result { white-space:pre-wrap; line-height:1.55; font-size:16px; }
+
+    .chips { display:flex; flex-wrap:wrap; gap:8px; }
+    .chip { background:#11213f; border:1px solid rgba(255,255,255,.18); color:#fff; padding:6px 10px; border-radius:999px; font-size:12px; }
+
+    .field { display:flex; gap:8px; align-items:center; }
+    input[type=text] {
+      flex:1; min-height:48px; min-width:220px;
+      background:#0b1020; color:#fff;
+      border:1px solid rgba(255,255,255,.25);
+      padding:12px 14px; border-radius:12px; font-size:16px; outline:none;
+    }
+    input[type=text]::placeholder { color:#ffffffcc; }
+    input[type=text]:focus{ border-color:#60a5fa; box-shadow:0 0 0 3px rgba(96,165,250,.28); }
+
+    .btn {
+      background:#0d2347; border:1px solid rgba(255,255,255,.25);
+      color:#fff; padding:12px 14px; border-radius:12px; cursor:pointer;
+      font-weight:700; transition:.15s; font-size:16px; min-height:48px;
+    }
+    .btn:active { transform: translateY(1px) scale(.99); }
+    .btn:hover { border-color:#60a5fa; }
+    .btn.primary{ background:linear-gradient(135deg, #2563eb, #22c55e); border:none; color:white; }
+
+    .dock { position:fixed; left:0; right:0; bottom:0; backdrop-filter:blur(8px);
+      background:linear-gradient(180deg, rgba(10,20,40,.0), rgba(10,20,40,.86));
+      padding:10px 12px; border-top:1px solid rgba(255,255,255,.12);
+    }
+    .dock-inner { max-width:980px; margin:0 auto; display:flex; gap:8px; }
+    .dock .btn { flex:1; min-height:48px; font-size:16px; }
+
+    .toast { position:fixed; left:50%; transform:translateX(-50%); bottom:76px; background:#1f2937; color:#fff; padding:10px 14px; border-radius:12px; font-size:14px; opacity:0; pointer-events:none; transition:.25s; }
+    .toast.show{ opacity:1; }
+
+    /* 鍵盤：每行 10 欄，自適應換行 */
+    .kbd { display:grid; grid-template-columns: repeat(10, 1fr); gap:8px; }
+    .row { margin-top:8px; }
+    .key {
+      text-align:center; padding:10px 0; border-radius:12px;
+      border:1px solid rgba(255,255,255,.18);
+      background:#0e1a33; color:#fff;
+      font-weight:800; font-size:24px; user-select:none; -webkit-tap-highlight-color:transparent;
+    }
+    .key:active { transform:scale(.98); }
+    .key.util { font-size:16px; font-weight:700; background:#11213f; }
+    .row-title { margin-top:8px; font-size:13px; opacity:.9; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="container">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+        <div>
+          <div class="title">港式台灣麻雀分析器 · 網頁版</div>
+          <!-- 副標已移除 -->
+        </div>
+        <div class="chips">
+          <span class="chip">輸入示例</span>
+          <span class="chip mono">123m456t789s11z55m</span>
+          <span class="chip mono">1m 2m 3m 4t 5t 6t 1s 2s 3s 1z 1z 5m 5m</span>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <div class="section-title">輸入手牌</div>
+          <div class="field" style="margin-bottom:8px">
+            <input id="tilesInput" type="text" inputmode="latin" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="輸入牌組或使用下方牌面鍵盤" />
+            <button class="btn" id="btnFormat" aria-label="格式化輸入">格式化</button>
+          </div>
+          <div id="unicodeHand" class="muted" style="min-height:28px;margin-bottom:8px"></div>
+
+          <div class="section-title">快速輸入鍵盤（點選牌面即可加入）</div>
+
+          <!-- 五行：筒、索、萬、字、工具 -->
+          <div class="row-title">筒</div>
+          <div class="kbd row" id="row-t"></div>
+
+          <div class="row-title">索</div>
+          <div class="kbd row" id="row-s"></div>
+
+          <div class="row-title">萬</div>
+          <div class="kbd row" id="row-m"></div>
+
+          <div class="row-title">字</div>
+          <div class="kbd row" id="row-z"></div>
+
+          <div class="kbd row">
+            <button class="key util" id="keyBack">⌫ 退格</button>
+            <button class="key util" id="keySpace">空格</button>
+            <button class="key util" id="keyClear">清空</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="section-title">規則</div>
+          <div class="muted" style="line-height:1.7; font-size:15px;">
+            <ul>
+              <li>花色：萬(m)、筒(t)、索(s)、字(z)；百搭：<span class="mono">X</span></li>
+              <li>聽牌：4、7、10、13、16 張；胡牌：5、8、11、14、17 張</li>
+              <li>字牌 <span class="mono">z</span> 不可吃（僅 <span class="mono">m/t/s</span> 可順）</li>
+              <li>可輸入「連串」或「空白分隔」格式</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:12px">
+        <div class="section-title">分析結果</div>
+        <div id="result" class="result" aria-live="polite"></div>
+      </div>
+    </div>
+
+    <div class="dock">
+      <div class="dock-inner">
+        <button class="btn" id="btnTing">僅聽牌</button>
+        <button class="btn" id="btnWin">僅胡牌</button>
+        <button class="btn primary" id="btnCheck">自動分析</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script>
+/* ======= Mahjong 核心 ======= */
+const SUITS=['m','t','s']; const HONORS=['1z','2z','3z','4z','5z','6z','7z']; const JOKER='X';
+const VALID_WIN=new Set([5,8,11,14,17]); const VALID_TING=new Set([4,7,10,13,16]);
+
+/* 5z 使用黑白樣式（變體選擇符 FE0E） */
+const UNICODE_TILES={
+  '1m':'🀇','2m':'🀈','3m':'🀉','4m':'🀊','5m':'🀋','6m':'🀌','7m':'🀍','8m':'🀎','9m':'🀏',
+  '1t':'🀙','2t':'🀚','3t':'🀛','4t':'🀜','5t':'🀝','6t':'🀞','7t':'🀟','8t':'🀠','9t':'🀡',
+  '1s':'🀐','2s':'🀑','3s':'🀒','4s':'🀓','5s':'🀔','6s':'🀕','7s':'🀖','8s':'🀗','9s':'🀘',
+  '1z':'🀀','2z':'🀁','3z':'🀂','4z':'🀃','5z':'🀄︎','6z':'🀅','7z':'🀆','X':'🀪'
+};
+
+function formatTile(t){ return UNICODE_TILES[t]||t }
+function formatHand(a){ return a.map(formatTile).join('') }
+function normalizeInput(s){ return s.normalize('NFKC').trim() }
+function validateCounts(tiles){
+  const c=new Map(); for(const t of tiles){ c.set(t,(c.get(t)||0)+1) }
+  for(const [t,count] of c){ if(t!=='X' && count>4) throw new Error(`牌 ${t} 數量超過4張，請檢查輸入。`) }
+}
+function parseTiles(input){
+  let parts=normalizeInput(input); if(!parts) return [];
+  let tokens=parts.split(/\s+/).filter(Boolean);
+  if(tokens.length===1){
+    const s=tokens[0]; const out=[];
+    for(let i=0;i<s.length;){
+      const ch=s[i]; const up=ch.toUpperCase();
+      if(up==='X'){ out.push('X'); i++; continue }
+      if(/\d/.test(ch)){
+        if(i+1<s.length && /[mtsz]/.test(s[i+1])){ out.push(ch+s[i+1]); i+=2; continue }
+        let digits=ch; i++;
+        while(i<s.length && /\d/.test(s[i])){ digits+=s[i]; i++; }
+        if(i<s.length && /[mtsz]/.test(s[i])){
+          const suit=s[i]; i++;
+          for(const d of digits){
+            const n=+d;
+            if(suit==='z' && !(1<=n&&n<=7)) throw new Error(`無效的字牌: ${d}z`);
+            if('mts'.includes(suit) && !(1<=n&&n<=9)) throw new Error(`無效的數字: ${d}，花色 ${suit} 應為 1-9`);
+            out.push(d+suit);
+          }
+        } else { throw new Error(`格式錯誤：數字 ${digits} 後缺少花色`); }
+      } else { throw new Error(`無效的字元: ${ch}`) }
+    }
+    validateCounts(out); return out;
+  }
+  const res=[];
+  for(const tk of tokens){
+    if(tk.toUpperCase()==='X'){ res.push('X'); continue }
+    let i=0, digits='';
+    while(i<tk.length){
+      const ch=tk[i];
+      if(/\d/.test(ch)){ digits+=ch; i++; }
+      else if(/[mtsz]/.test(ch)){
+        for(const d of digits){
+          const n=+d;
+          if(ch==='z' && !(1<=n&&n<=7)) throw new Error(`無效的字牌: ${d}z`);
+          if('mts'.includes(ch) && !(1<=n&&n<=9)) throw new Error(`無效的數字: ${d}，花色 ${ch} 應為 1-9`);
+          res.push(`${d}${ch}`);
+        }
+        digits=''; i++;
+      } else if(ch.toUpperCase()==='X'){ res.push('X'); i++; }
+      else { throw new Error(`無效的字元: ${ch}`); }
+    }
+    if(digits) throw new Error(`格式錯誤：數字後缺少花色 (${digits})`);
+  }
+  validateCounts(res); return res;
+}
+function isTriplet(trio){ return trio.length===3 && trio[0]===trio[1] && trio[1]===trio[2] }
+function isSequence(trio){
+  if(trio.length!==3) return false;
+  const suit=trio[0][1]; if(!('mts'.includes(suit))) return false;
+  if(!(trio.every(t=>t[1]===suit))) return false;
+  const nums=trio.map(t=>parseInt(t[0],10)).sort((a,b)=>a-b);
+  return nums[2]-nums[0]===2 && nums[1]-nums[0]===1
+}
+function allTiles(){ return [...SUITS.flatMap(s=>Array.from({length:9},(_,i)=>`${i+1}${s}`)), ...HONORS] }
+function substituteJokers(tiles){
+  const j=tiles.filter(t=>t==='X').length; const base=tiles.filter(t=>t!=='X'); if(j===0) return [tiles];
+  const candidates=allTiles().filter(t=> base.filter(x=>x===t).length<4);
+  const results=[];
+  function back(idx,acc){
+    if(idx===j){
+      const arr=[...base,...acc]; const c=new Map(); let ok=true;
+      for(const t of arr){ c.set(t,(c.get(t)||0)+1); if(c.get(t)>4){ ok=false; break; } }
+      if(ok) results.push(arr); return;
+    }
+    for(const tile of candidates){ acc.push(tile); back(idx+1,acc); acc.pop(); }
+  }
+  back(0,[]); return results;
+}
+const memoTry=new Map();
+function tryMelds(tiles){
+  const key=tiles.slice().sort().join(',');
+  if(memoTry.has(key)) return memoTry.get(key);
+  if(tiles.length===0) return [[]];
+  const res=[]; const c=new Map();
+  for(const t of tiles){ c.set(t,(c.get(t)||0)+1); }
+  for(const [tile,count] of c){
+    if(count>=3){
+      const rem=tiles.slice(); let removed=0;
+      for(let i=rem.length-1;i>=0 && removed<3;i--){ if(rem[i]===tile){ rem.splice(i,1); removed++; } }
+      for(const sub of tryMelds(rem)) res.push([[tile,tile,tile], ...sub]);
+    }
+  }
+  const uniq=[...new Set(tiles)].sort();
+  for(const t of uniq){
+    if(t.length!==2) continue; const suit=t[1]; const r=parseInt(t[0],10);
+    if(!('mts'.includes(suit))) continue; if(Number.isNaN(r)||r>=8) continue;
+    const t1=`${r}${suit}`, t2=`${r+1}${suit}`, t3=`${r+2}${suit}`;
+    if(tiles.includes(t1)&&tiles.includes(t2)&&tiles.includes(t3)){
+      const rem=tiles.slice();
+      [t1,t2,t3].forEach(x=>{ const idx=rem.indexOf(x); if(idx>-1) rem.splice(idx,1); });
+      for(const sub of tryMelds(rem)) res.push([[t1,t2,t3], ...sub]);
+    }
+  }
+  memoTry.set(key,res); return res;
+}
+function findWinCombinations(hand){
+  if(!VALID_WIN.has(hand.length)) return [];
+  const unique=new Set(); const out=[];
+  for(const sub of substituteJokers(hand)){
+    const cnt=new Map(); for(const t of sub){ cnt.set(t,(cnt.get(t)||0)+1); }
+    const eyes=[...cnt].filter(([,v])=>v>=2).map(([k])=>k);
+    for(const eye of eyes){
+      const temp=sub.slice(); let removed=0;
+      for(let i=temp.length-1;i>=0 && removed<2;i--){ if(temp[i]===eye){ temp.splice(i,1); removed++; } }
+      const melds=tryMelds(temp);
+      for(const m of melds){
+        const all=[[eye,eye],...m];
+        const k=all.map(x=>x.slice().sort().join('')).sort().join('|');
+        if(!unique.has(k)){ unique.add(k); out.push({ melds: all }); }
+      }
+    }
+  }
+  return out;
+}
+function formatCombinations(combos){
+  if(!combos||!combos.length) return '無法胡牌';
+  let out=[], idx=1;
+  for(const c of combos){
+    const m=c.melds; const lines=[];
+    lines.push(`組合 ${idx++}:`);
+    lines.push(`  將牌: ${m[0].map(formatTile).join(' ')}`);
+    for(let i=1;i<m.length;i++){
+      const s=m[i].map(formatTile).join(' ');
+      if(isTriplet(m[i])) lines.push(`  刻子 ${i}: ${s}`);
+      else if(isSequence(m[i])) lines.push(`  順子 ${i}: ${s}`);
+      else lines.push(`  面子 ${i}: ${s}`);
+    }
+    out.push(lines.join('\n'));
+  }
+  return out.join('\n\n');
+}
+function countMap(a){ const m=new Map(); for(const t of a){ m.set(t,(m.get(t)||0)+1); } return m; }
+function analyzeTingCandidates(hand){
+  if(!VALID_TING.has(hand.length)) return {};
+  const waiting={}; const hc=countMap(hand);
+  for(const tile of allTiles()){
+    if((hc.get(tile)||0)>=4) continue;
+    const temp=hand.concat([tile]);
+    const combos=findWinCombinations(temp);
+    if(combos.length) waiting[tile]=combos;
+  }
+  return waiting;
+}
+function analyzeTingTilesOnly(hand){
+  const m=analyzeTingCandidates(hand); const tiles=Object.keys(m);
+  const order={ 't':0,'s':1,'m':2,'z':3,'X':4 };
+  tiles.sort((a,b)=>{
+    const sa=a[a.length-1], sb=b[b.length-1];
+    const na=parseInt(a,10)||0, nb=parseInt(b,10)||0;
+    const oa=order[sa]??99, ob=order[sb]??99;
+    if(oa!==ob) return oa-ob; return na-nb;
+  });
+  return tiles;
+}
+function analyzeDiscardToTing(hand){
+  if(!VALID_WIN.has(hand.length)) return [];
+  const res=[];
+  for(let i=0;i<hand.length;i++){
+    const nh=hand.slice(0,i).concat(hand.slice(i+1));
+    const ting=analyzeTingTilesOnly(nh);
+    if(ting.length) res.push({ discard:hand[i], ting_tiles:ting });
+  }
+  return res;
+}
+
+/* ======= UI glue ======= */
+const $=s=>document.querySelector(s);
+const tilesInput=$('#tilesInput'); const resultEl=$('#result'); const unicodeHandEl=$('#unicodeHand'); const toast=$('#toast');
+function setResult(t){ resultEl.textContent=t }
+function setUnicodeHand(arr){ unicodeHandEl.innerHTML = arr.length? ('當前手牌： '+formatHand(arr)) : '' }
+function showToast(msg){ toast.textContent=msg; toast.classList.add('show'); setTimeout(()=>toast.classList.remove('show'), 1600) }
+function insertText(t){ const cur=tilesInput.value; tilesInput.value=(cur?cur.replace(/\s+$/,'')+' ':'')+t; fireFormat(false) }
+
+/* 依照需求：筒 → 索 → 萬 → 字(+X) → 工具 */
+function buildRow(el, list){
+  for(const code of list){
+    const btn=document.createElement('button');
+    btn.className='key'; btn.type='button'; btn.dataset.tile=code;
+    btn.textContent = UNICODE_TILES[code] || code;
+    btn.title = code; btn.setAttribute('aria-label', code);
+    btn.addEventListener('click', ()=> insertText(code + ' '));
+    el.appendChild(btn);
+  }
+}
+buildRow(document.getElementById('row-t'), Array.from({length:9},(_,i)=>`${i+1}t`));
+buildRow(document.getElementById('row-s'), Array.from({length:9},(_,i)=>`${i+1}s`));
+buildRow(document.getElementById('row-m'), Array.from({length:9},(_,i)=>`${i+1}m`));
+buildRow(document.getElementById('row-z'), [...Array.from({length:7},(_,i)=>`${i+1}z`), 'X']);
+
+/* 工具鍵 */
+document.getElementById('keySpace').addEventListener('click',()=>{ tilesInput.value = tilesInput.value.replace(/\s*$/, ' ') })
+document.getElementById('keyBack').addEventListener('click',()=>{ tilesInput.value = tilesInput.value.trimEnd().replace(/\S+\s*$|.$/,''); fireFormat(false) })
+document.getElementById('keyClear').addEventListener('click',()=>{ tilesInput.value=''; setUnicodeHand([]); setResult('') })
+
+function fireFormat(withToast=true){
+  try{ const tiles=parseTiles(tilesInput.value); setUnicodeHand(tiles); if(withToast) showToast('已格式化'); }
+  catch(e){ /* 輸入中暫不提示錯誤 */ }
+}
+document.getElementById('btnFormat').addEventListener('click',()=>fireFormat(true))
+
+/* 按鈕功能 */
+document.getElementById('btnWin').addEventListener('click',()=>{
+  try{
+    const tiles=parseTiles(tilesInput.value);
+    if(!VALID_WIN.has(tiles.length)){ setResult('錯誤：請輸入 5、8、11、14 或 17 張手牌'); setUnicodeHand(tiles); return }
+    const combos=findWinCombinations(tiles);
+    if(!combos.length){ setResult('此牌組無法胡牌。') }
+    else { setResult(`此牌組可胡牌，共 ${combos.length} 種組合：\n\n`+formatCombinations(combos)) }
+    setUnicodeHand(tiles)
+  }catch(e){ setResult('錯誤：'+e.message) }
+});
+document.getElementById('btnTing').addEventListener('click',()=>{
+  try{
+    const tiles=parseTiles(tilesInput.value);
+    if(!VALID_TING.has(tiles.length)){ setResult('錯誤：請輸入 4、7、10、13 或 16 張手牌'); setUnicodeHand(tiles); return }
+    const map=analyzeTingCandidates(tiles);
+    if(Object.keys(map).length===0){ setResult('此牌組尚未聽牌。'); setUnicodeHand(tiles); return }
+    const lines=['此牌組正在聽牌：'];
+    const order=analyzeTingTilesOnly(tiles);
+    for(const t of order){
+      lines.push(`等待：${t}`);
+      const formatted=formatCombinations(map[t]); formatted.split('\n').forEach(line=>lines.push('  '+line))
+    }
+    setResult(lines.join('\n')); setUnicodeHand(tiles)
+  }catch(e){ setResult('錯誤：'+e.message) }
+});
+document.getElementById('btnCheck').addEventListener('click',()=>{
+  try{
+    const tiles=parseTiles(tilesInput.value); const n=tiles.length; setUnicodeHand(tiles);
+    if(VALID_TING.has(n)){
+      const ting=analyzeTingTilesOnly(tiles);
+      if(ting.length===0){ setResult('此牌組尚未聽牌。'); return }
+      setResult('此牌組正在聽牌：\n'+ting.map(formatTile).join(' ')); return
+    }
+    if(VALID_WIN.has(n)){
+      const win=findWinCombinations(tiles);
+      if(win.length){ setResult(`此牌組可胡牌，共 ${win.length} 種組合：\n\n`+formatCombinations(win)); return }
+      const sug=analyzeDiscardToTing(tiles);
+      if(!sug.length){ setResult('此牌組無法胡牌，也無聽牌潛力。'); return }
+      const lines=['無法胡牌，但可考慮下列打法進入聽牌：'];
+      for(const s of sug){ lines.push(`捨棄 ${formatTile(s.discard)} ➜ 聽牌: `+ s.ting_tiles.map(formatTile).join(' ')) }
+      setResult(lines.join('\n')); return
+    }
+    setResult('錯誤：牌張數不合法（小相公/大相公）。')
+  }catch(e){ setResult('錯誤：'+e.message) }
+});
+
+/* 輸入時延遲格式化 */
+let typingTimer; tilesInput.addEventListener('input',()=>{ clearTimeout(typingTimer); typingTimer=setTimeout(()=>fireFormat(false), 120) })
+</script>
+</body>
+</html>
