@@ -111,8 +111,25 @@
 
     .row-title { margin-top:8px; font-size:13px; opacity:.9; }
 
-    /* 顯示區的麻雀字元與鍵盤一致 */
-    #unicodeHand, #result { font-size: var(--tile-size); line-height:1.55; white-space:pre-wrap; }
+    /* ===== 當前手牌：使用無邊框麻雀按鈕 ===== */
+    .hand{ display:flex; align-items:center; flex-wrap:wrap; gap:6px; }
+    .hand-label{ font-size:14px; opacity:.9; margin-right:2px; }
+    .hand-btn{
+      background: transparent;
+      border: none;
+      padding: 2px;               /* 增加可點區域但不顯邊框 */
+      font-size: var(--tile-size);
+      line-height: 1;
+      color:#fff;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      -ms-touch-action: manipulation; touch-action: manipulation;
+    }
+    .hand-btn:active{ transform: scale(.96); }
+    .hand-btn:focus{ outline: none; }
+
+    /* 顯示區的麻雀字元與鍵盤一致（分析結果仍用文字呈現） */
+    #result { font-size: var(--tile-size); line-height:1.55; white-space:pre-wrap; }
 
     .actions{ display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; }
 
@@ -139,6 +156,8 @@
           <div class="field" style="margin-bottom:8px">
             <input id="tilesInput" type="text" inputmode="latin" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="輸入牌組或使用下方牌面鍵盤" />
           </div>
+
+          <!-- 當前手牌（無邊框麻雀按鈕，點擊刪除） -->
           <div id="unicodeHand" class="muted" style="min-height:28px;margin-bottom:8px"></div>
 
           <div class="section-title">快速輸入鍵盤</div>
@@ -417,19 +436,59 @@ const unicodeHandEl=$('#unicodeHand');
 const actionsEl=$('#resultActions');
 
 function setResult(t){ resultEl.textContent=t }
+
+/* 將 tiles 陣列寫回輸入框（以空白分隔並保留尾空白以利連打） */
+function writeTiles(arr){
+  tilesInput.value = arr.join(' ') + (arr.length ? ' ' : '');
+}
+
+/* === 當前手牌：渲染無邊框麻雀按鈕，點擊刪除 === */
+function renderHandButtons(arr){
+  if(!arr.length){ unicodeHandEl.innerHTML=''; return; }
+  let html = '<div class="hand"><span class="hand-label">當前手牌：</span>';
+  arr.forEach((t,i)=>{
+    html += `<button class="hand-btn" type="button" data-idx="${i}" aria-label="刪除 ${t}" title="刪除 ${t}">${formatTile(t)}</button>`;
+  });
+  html += '</div>';
+  unicodeHandEl.innerHTML = html;
+}
+
+/* 原先的 setUnicodeHand 改為按鈕渲染 */
 function setUnicodeHand(arr){
-  unicodeHandEl.innerHTML = arr.length ? ('當前手牌： ' + formatHand(arr)) : '';
+  renderHandButtons(arr);
 }
-function insertText(t){
-  // 檢查是否已達 4 張
-  const cnt = (tileCounts.get(t) || 0);
-  if (cnt >= 4) return;
-  const cur=tilesInput.value;
-  tilesInput.value=(cur?cur.replace(/\s+$/,'')+' ':'')+t+' ';
-  tileCounts.set(t, cnt+1);
-  fireFormat();
-  updateKeyboardState();
-}
+
+/* 點擊「當前手牌」內的牌：刪除該張 */
+unicodeHandEl.addEventListener('pointerdown', (e)=>{
+  const btn = e.target.closest('.hand-btn');
+  if(!btn) return;
+  e.preventDefault(); // 避免雙擊放大
+  try{
+    const tiles = parseTiles(tilesInput.value);
+    const idx = +btn.dataset.idx;
+    if (!Number.isNaN(idx) && idx>=0 && idx<tiles.length){
+      tiles.splice(idx,1);
+      writeTiles(tiles);
+      fireFormat();
+      updateKeyboardState();
+    }
+  }catch(_){}
+});
+/* 桌面備援 */
+unicodeHandEl.addEventListener('click', (e)=>{
+  const btn = e.target.closest('.hand-btn');
+  if(!btn) return;
+  try{
+    const tiles = parseTiles(tilesInput.value);
+    const idx = +btn.dataset.idx;
+    if (!Number.isNaN(idx) && idx>=0 && idx<tiles.length){
+      tiles.splice(idx,1);
+      writeTiles(tiles);
+      fireFormat();
+      updateKeyboardState();
+    }
+  }catch(_){}
+});
 
 /* ======= 牌面按鈕 4 張上限 ======= */
 const tileCounts = new Map(); // 依輸入即時計數
@@ -440,7 +499,7 @@ function recountFromInput(){
     const tiles = parseTiles(tilesInput.value);
     for (const x of tiles) tileCounts.set(x, (tileCounts.get(x)||0)+1);
   } catch(e) {
-    // 無效中間狀態：忽略，不更新
+    // 無效中間狀態：忽略
   }
 }
 
@@ -454,6 +513,16 @@ function updateKeyboardState(){
 }
 
 /* 建鍵盤 */
+function insertText(t){
+  const cnt = (tileCounts.get(t) || 0);
+  if (cnt >= 4) return;
+  const cur=tilesInput.value;
+  tilesInput.value=(cur?cur.replace(/\s+$/,'')+' ':'')+t+' ';
+  tileCounts.set(t, cnt+1);
+  fireFormat();
+  updateKeyboardState();
+}
+
 function buildRow(el, list){
   for(const code of list){
     const btn=document.createElement('button');
@@ -463,7 +532,7 @@ function buildRow(el, list){
     btn.textContent = UNICODE_TILES[code] || code;
     btn.title = code;
     btn.setAttribute('aria-label', code);
-    // 允許快速點選；避免雙擊放大：用 pointerdown 並阻止預設
+    // 允許快速點選；避免雙擊放大：pointerdown + preventDefault
     btn.addEventListener('pointerdown',(e)=>{ e.preventDefault(); insertText(code); }, {passive:false});
     // 備援 click（桌面）
     btn.addEventListener('click',(e)=>{ e.preventDefault(); insertText(code); });
@@ -485,17 +554,15 @@ document.getElementById('keySpace').addEventListener('click',()=>{
   tilesInput.value = tilesInput.value.replace(/\s*$/, ' ');
 });
 document.getElementById('keyBack').addEventListener('click',()=>{
-  // 移除最後一個 token（含尾隨空白）
   const before = tilesInput.value;
   const after = before.trimEnd().replace(/\S+\s*$|.$/,'');
   tilesInput.value = after;
-  // 重新計數並更新
   recountFromInput();
   fireFormat();
   updateKeyboardState();
 });
 
-/* 即時格式化（也會同步鍵盤狀態） */
+/* 即時格式化（同步「當前手牌」按鈕與鍵盤狀態） */
 function fireFormat(){
   try{
     const tiles=parseTiles(tilesInput.value);
@@ -503,7 +570,6 @@ function fireFormat(){
     recountFromInput();
     updateKeyboardState();
   }catch(e){
-    // 輸入中暫不提示錯誤；仍可更新鍵盤（以當前可解析部分為準）
     recountFromInput();
     updateKeyboardState();
   }
@@ -568,6 +634,7 @@ document.addEventListener('touchend', function (e) {
 /* 初始狀態 */
 recountFromInput();
 updateKeyboardState();
+fireFormat();
 
 /* 輸入時延遲格式化 */
 let typingTimer; 
