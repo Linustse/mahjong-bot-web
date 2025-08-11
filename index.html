@@ -219,7 +219,7 @@
     </div>
   </div>
 
-  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
 /* ======= Mahjong 核心 ======= */
@@ -234,7 +234,6 @@ const UNICODE_TILES={
 };
 
 function formatTile(t){ return UNICODE_TILES[t]||t }
-function formatHand(a){ return a.map(formatTile).join('') }
 function normalizeInput(s){ return s.normalize('NFKC').trim() }
 function validateCounts(tiles){
   const c=new Map(); for(const t of tiles){ c.set(t,(c.get(t)||0)+1) }
@@ -306,6 +305,7 @@ function isSequence(trio){
   const nums=trio.map(t=>parseInt(t[0],10)).sort((a,b)=>a-b);
   return nums[2]-nums[0]===2 && nums[1]-nums[0]===1
 }
+const SUITS=['m','t','s']; const HONORS=['1z','2z','3z','4z','5z','6z','7z']; const JOKER='X';
 function allTiles(){ return [...SUITS.flatMap(s=>Array.from({length:9},(_,i)=>`${i+1}${s}`)), ...HONORS] }
 function substituteJokers(tiles){
   const j=tiles.filter(t=>t==='X').length; const base=tiles.filter(t=>t!=='X'); if(j===0) return [tiles];
@@ -471,28 +471,11 @@ function setUnicodeHand(arr){
   renderHandButtons(arr);
 }
 
-/* 點擊「當前手牌」內的牌：刪除該張 */
-unicodeHandEl.addEventListener('pointerdown', (e)=>{
+/* 1) 「當前手牌」刪牌（事件委派 + 單一 pointerup） */
+unicodeHandEl.addEventListener('pointerup', (e)=>{
   const btn = e.target.closest('.hand-btn');
   if(!btn) return;
-  /* ✅ 僅在觸控/手寫筆處理 pointerdown；桌機交給 click */
-  if (e.pointerType === 'mouse') return;
-  e.preventDefault(); // 避免雙擊放大
-  try{
-    const tiles = parseTiles(tilesInput.value);
-    const idx = +btn.dataset.idx;
-    if (!Number.isNaN(idx) && idx>=0 && idx<tiles.length){
-      tiles.splice(idx,1);
-      writeTiles(tiles);
-      fireFormat();
-      updateKeyboardState();
-    }
-  }catch(_){}
-});
-/* 桌面備援（只會觸發一次） */
-unicodeHandEl.addEventListener('click', (e)=>{
-  const btn = e.target.closest('.hand-btn');
-  if(!btn) return;
+  e.preventDefault(); // 避免模擬 mouse 事件或選字
   try{
     const tiles = parseTiles(tilesInput.value);
     const idx = +btn.dataset.idx;
@@ -533,7 +516,6 @@ function updateKeyboardState(){
 function insertText(t){
   const cnt = (tileCounts.get(t) || 0);
   if (cnt >= 4) return;
-  // 阻擋總張數超過 17
   const tot = totalCount();
   if (tot >= 17) return;
 
@@ -544,6 +526,7 @@ function insertText(t){
   updateKeyboardState();
 }
 
+/* 2) 牌面鍵盤建鍵（每顆鍵只綁 pointerup） */
 function buildRow(el, list){
   for(const code of list){
     const btn=document.createElement('button');
@@ -553,17 +536,13 @@ function buildRow(el, list){
     btn.textContent = UNICODE_TILES[code] || code;
     btn.title = code;
     btn.setAttribute('aria-label', code);
-    // ✅ 觸控/筆使用 pointerdown（阻止預設以避免放大）；桌機用 click
-    btn.addEventListener('pointerdown',(e)=>{
-      if (e.pointerType === 'mouse') return;     // 避免桌機雙觸發
+
+    // 只用 pointerup：桌機與手機都走這裡一次
+    btn.addEventListener('pointerup',(e)=>{
       e.preventDefault();
       insertText(code);
     }, {passive:false});
-    // ✅ 桌面只走 click，一次插入
-    btn.addEventListener('click',(e)=>{
-      e.preventDefault();
-      insertText(code);
-    });
+
     el.appendChild(btn);
   }
 }
@@ -599,8 +578,6 @@ function sortTilesByKeyboardOrder(arr){
     const oa = suitOrder[sa] ?? 99;
     const ob = suitOrder[sb] ?? 99;
     if(oa !== ob) return oa - ob;
-
-    // 同花色：數字小到大；字牌 1–7；X 已分在最後不進此分支
     const na = a === 'X' ? 0 : parseInt(a[0],10);
     const nb = b === 'X' ? 0 : parseInt(b[0],10);
     return na - nb;
