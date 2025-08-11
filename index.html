@@ -2,11 +2,13 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8" />
+  <!-- 關閉縮放 & 避免雙擊放大 -->
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <title>港式台灣麻雀分析器 · 網頁版</title>
   <style>
     /* 基本配色（全部白字） */
     html, body { height:100%; }
+    html { -ms-touch-action: manipulation; touch-action: manipulation; } /* 取消雙擊放大（行為層面） */
     body {
       margin:0;
       font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Noto Sans, Arial, "Apple Color Emoji", "Segoe UI Emoji";
@@ -35,6 +37,7 @@
       background:#0b1020; color:#fff;
       border:1px solid rgba(255,255,255,.25);
       padding:12px 14px; border-radius:12px; font-size:16px; outline:none;
+      -ms-touch-action: manipulation; touch-action: manipulation;
     }
     input[type=text]::placeholder { color:#ffffffcc; }
     input[type=text]:focus{ border-color:#60a5fa; box-shadow:0 0 0 3px rgba(96,165,250,.28); }
@@ -43,6 +46,7 @@
       background:#0d2347; border:1px solid rgba(255,255,255,.25);
       color:#fff; padding:12px 14px; border-radius:12px; cursor:pointer;
       font-weight:700; transition:.15s; font-size:16px; min-height:48px;
+      -ms-touch-action: manipulation; touch-action: manipulation;
     }
     .btn:active { transform: translateY(1px) scale(.99); }
     .btn:hover { border-color:#60a5fa; }
@@ -58,17 +62,29 @@
     .toast { position:fixed; left:50%; transform:translateX(-50%); bottom:76px; background:#1f2937; color:#fff; padding:10px 14px; border-radius:12px; font-size:14px; opacity:0; pointer-events:none; transition:.25s; }
     .toast.show{ opacity:1; }
 
-    /* 鍵盤：每行 10 欄，自適應換行 */
-    .kbd { display:grid; grid-template-columns: repeat(10, 1fr); gap:8px; }
+    /* 鍵盤：改為靠右的彈性排版（右手友善） */
+    .kbd {
+      display:flex;
+      flex-wrap:wrap;          /* 小螢幕自動換行 */
+      gap:8px;
+      justify-content:flex-end;/* 整排靠右 */
+    }
     .row { margin-top:8px; }
     .key {
       text-align:center; padding:10px 0; border-radius:12px;
       border:1px solid rgba(255,255,255,.18);
       background:#0e1a33; color:#fff;
       font-weight:800; font-size:24px; user-select:none; -webkit-tap-highlight-color:transparent;
+      min-width:56px;         /* 給予合理按鈕寬度 */
+      flex: 0 0 56px;         /* 在 .kbd 的 flex 佈局下保持一致寬度 */
     }
     .key:active { transform:scale(.98); }
     .key.util { font-size:16px; font-weight:700; background:#11213f; }
+
+    /* 工具列：清空/退格/空格 寬度 = 其他鍵的兩倍 */
+    .kbd.tools .key { flex: 1 0 0; min-width: 0; }  /* 基準寬 */
+    .kbd.tools .key.util { flex: 2 0 0; }          /* 變成雙倍寬 */
+
     .row-title { margin-top:8px; font-size:13px; opacity:.9; }
   </style>
 </head>
@@ -78,7 +94,6 @@
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
         <div>
           <div class="title">港式台灣麻雀分析器 · 網頁版</div>
-          <!-- 副標已移除 -->
         </div>
         <div class="chips">
           <span class="chip">輸入示例</span>
@@ -87,37 +102,48 @@
         </div>
       </div>
 
+      <!-- 兩欄區塊：左側輸入 +（立刻）下方分析結果；右側規則 -->
       <div class="grid">
-        <div class="card">
-          <div class="section-title">輸入手牌</div>
-          <div class="field" style="margin-bottom:8px">
-            <input id="tilesInput" type="text" inputmode="latin" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="輸入牌組或使用下方牌面鍵盤" />
-            <button class="btn" id="btnFormat" aria-label="格式化輸入">格式化</button>
+        <!-- 左欄：輸入與鍵盤 -->
+        <div>
+          <div class="card">
+            <div class="section-title">輸入手牌</div>
+            <div class="field" style="margin-bottom:8px">
+              <input id="tilesInput" type="text" inputmode="latin" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="輸入牌組或使用下方牌面鍵盤" />
+              <button class="btn" id="btnFormat" aria-label="格式化輸入">格式化</button>
+            </div>
+            <div id="unicodeHand" class="muted" style="min-height:28px;margin-bottom:8px"></div>
+
+            <div class="section-title">快速輸入鍵盤（點選牌面即可加入）</div>
+
+            <!-- 五行：筒、索、萬、字、工具（全部靠右） -->
+            <div class="row-title">筒</div>
+            <div class="kbd row" id="row-t"></div>
+
+            <div class="row-title">索</div>
+            <div class="kbd row" id="row-s"></div>
+
+            <div class="row-title">萬</div>
+            <div class="kbd row" id="row-m"></div>
+
+            <div class="row-title">字</div>
+            <div class="kbd row" id="row-z"></div>
+
+            <div class="kbd row tools">
+              <button class="key util" id="keyBack">⌫ 退格</button>
+              <button class="key util" id="keySpace">空格</button>
+              <button class="key util" id="keyClear">清空</button>
+            </div>
           </div>
-          <div id="unicodeHand" class="muted" style="min-height:28px;margin-bottom:8px"></div>
 
-          <div class="section-title">快速輸入鍵盤（點選牌面即可加入）</div>
-
-          <!-- 五行：筒、索、萬、字、工具 -->
-          <div class="row-title">筒</div>
-          <div class="kbd row" id="row-t"></div>
-
-          <div class="row-title">索</div>
-          <div class="kbd row" id="row-s"></div>
-
-          <div class="row-title">萬</div>
-          <div class="kbd row" id="row-m"></div>
-
-          <div class="row-title">字</div>
-          <div class="kbd row" id="row-z"></div>
-
-          <div class="kbd row">
-            <button class="key util" id="keyBack">⌫ 退格</button>
-            <button class="key util" id="keySpace">空格</button>
-            <button class="key util" id="keyClear">清空</button>
+          <!-- 需求：分析結果放在輸入手牌正下方 -->
+          <div class="card" style="margin-top:12px">
+            <div class="section-title">分析結果</div>
+            <div id="result" class="result" aria-live="polite"></div>
           </div>
         </div>
 
+        <!-- 右欄：規則 -->
         <div class="card">
           <div class="section-title">規則</div>
           <div class="muted" style="line-height:1.7; font-size:15px;">
@@ -129,11 +155,6 @@
             </ul>
           </div>
         </div>
-      </div>
-
-      <div class="card" style="margin-top:12px">
-        <div class="section-title">分析結果</div>
-        <div id="result" class="result" aria-live="polite"></div>
       </div>
     </div>
 
@@ -343,7 +364,7 @@ function setUnicodeHand(arr){ unicodeHandEl.innerHTML = arr.length? ('當前手�
 function showToast(msg){ toast.textContent=msg; toast.classList.add('show'); setTimeout(()=>toast.classList.remove('show'), 1600) }
 function insertText(t){ const cur=tilesInput.value; tilesInput.value=(cur?cur.replace(/\s+$/,'')+' ':'')+t; fireFormat(false) }
 
-/* 依照需求：筒 → 索 → 萬 → 字(+X) → 工具 */
+/* 依照需求：筒 → 索 → 萬 → 字(+X) → 工具（鍵盤全部靠右） */
 function buildRow(el, list){
   for(const code of list){
     const btn=document.createElement('button');
@@ -416,6 +437,14 @@ document.getElementById('btnCheck').addEventListener('click',()=>{
     setResult('錯誤：牌張數不合法（小相公/大相公）。')
   }catch(e){ setResult('錯誤：'+e.message) }
 });
+
+/* 取消雙擊放大（程式層面，保險起見） */
+let lastTouchEnd = 0;
+document.addEventListener('touchend', function (e) {
+  const now = Date.now();
+  if (now - lastTouchEnd <= 300) { e.preventDefault(); }
+  lastTouchEnd = now;
+}, { passive:false });
 
 /* 輸入時延遲格式化 */
 let typingTimer; tilesInput.addEventListener('input',()=>{ clearTimeout(typingTimer); typingTimer=setTimeout(()=>fireFormat(false), 120) })
