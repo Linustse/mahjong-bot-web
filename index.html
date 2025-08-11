@@ -475,6 +475,8 @@ function setUnicodeHand(arr){
 unicodeHandEl.addEventListener('pointerdown', (e)=>{
   const btn = e.target.closest('.hand-btn');
   if(!btn) return;
+  /* ✅ 僅在觸控/手寫筆處理 pointerdown；桌機交給 click */
+  if (e.pointerType === 'mouse') return;
   e.preventDefault(); // 避免雙擊放大
   try{
     const tiles = parseTiles(tilesInput.value);
@@ -487,7 +489,7 @@ unicodeHandEl.addEventListener('pointerdown', (e)=>{
     }
   }catch(_){}
 });
-/* 桌面備援 */
+/* 桌面備援（只會觸發一次） */
 unicodeHandEl.addEventListener('click', (e)=>{
   const btn = e.target.closest('.hand-btn');
   if(!btn) return;
@@ -551,10 +553,17 @@ function buildRow(el, list){
     btn.textContent = UNICODE_TILES[code] || code;
     btn.title = code;
     btn.setAttribute('aria-label', code);
-    // 允許快速點選；避免雙擊放大：pointerdown + preventDefault
-    btn.addEventListener('pointerdown',(e)=>{ e.preventDefault(); insertText(code); }, {passive:false});
-    // 備援 click（桌面）
-    btn.addEventListener('click',(e)=>{ e.preventDefault(); insertText(code); });
+    // ✅ 觸控/筆使用 pointerdown（阻止預設以避免放大）；桌機用 click
+    btn.addEventListener('pointerdown',(e)=>{
+      if (e.pointerType === 'mouse') return;     // 避免桌機雙觸發
+      e.preventDefault();
+      insertText(code);
+    }, {passive:false});
+    // ✅ 桌面只走 click，一次插入
+    btn.addEventListener('click',(e)=>{
+      e.preventDefault();
+      insertText(code);
+    });
     el.appendChild(btn);
   }
 }
@@ -605,7 +614,6 @@ document.getElementById('btnSort').addEventListener('click', ()=>{
     fireFormat();
     updateKeyboardState();
   }catch(e){
-    // 若輸入有誤（例如超過 17 張等），給個溫和提示
     const toast = document.getElementById('toast');
     toast.textContent = '無法整理：' + e.message;
     toast.classList.add('show');
@@ -621,7 +629,6 @@ function fireFormat(){
     recountFromInput();
     updateKeyboardState();
   }catch(e){
-    // 若是超過 17 張等錯誤，這裡不擾民，只更新鍵盤狀態
     recountFromInput();
     updateKeyboardState();
   }
