@@ -426,7 +426,7 @@ const pageMain = $('#page-main');
 const pageRules = $('#page-rules');
 const btnToRules = $('#btnToRules');
 const btnBackToMain = $('#btnBackToMain');
-const dock = $('#dock');
+const dock = $('#dock']);
 
 function showMain(){
   pageMain.classList.add('active'); pageRules.classList.remove('active');
@@ -471,24 +471,33 @@ function setUnicodeHand(arr){
   renderHandButtons(arr);
 }
 
-/* 點擊「當前手牌」內的牌：刪除該張 */
+/* === 防雙觸發：觸控與點擊分流 === */
+let lastTouchTime = 0;
+const TOUCH_CLICK_GUARD_MS = 500;
+
+/* 點擊「當前手牌」內的牌：刪除該張（觸控走 pointerdown、滑鼠/鍵盤走 click） */
 unicodeHandEl.addEventListener('pointerdown', (e)=>{
   const btn = e.target.closest('.hand-btn');
   if(!btn) return;
-  e.preventDefault(); // 避免雙擊放大
-  try{
-    const tiles = parseTiles(tilesInput.value);
-    const idx = +btn.dataset.idx;
-    if (!Number.isNaN(idx) && idx>=0 && idx<tiles.length){
-      tiles.splice(idx,1);
-      writeTiles(tiles);
-      fireFormat();
-      updateKeyboardState();
-    }
-  }catch(_){}
-});
-/* 桌面備援 */
+  if(e.pointerType === 'touch'){
+    e.preventDefault();
+    lastTouchTime = Date.now();
+    try{
+      const tiles = parseTiles(tilesInput.value);
+      const idx = +btn.dataset.idx;
+      if (!Number.isNaN(idx) && idx>=0 && idx<tiles.length){
+        tiles.splice(idx,1);
+        writeTiles(tiles);
+        fireFormat();
+        updateKeyboardState();
+      }
+    }catch(_){}
+  }
+}, {passive:false});
+
 unicodeHandEl.addEventListener('click', (e)=>{
+  // 若剛發生過觸控，則忽略此 click（避免一按兩次）
+  if (Date.now() - lastTouchTime < TOUCH_CLICK_GUARD_MS) { e.preventDefault(); return; }
   const btn = e.target.closest('.hand-btn');
   if(!btn) return;
   try{
@@ -527,11 +536,10 @@ function updateKeyboardState(){
   });
 }
 
-/* 建鍵盤 */
+/* 建鍵盤：觸控用 pointerdown，滑鼠/鍵盤用 click（避免桌面雙觸發） */
 function insertText(t){
   const cnt = (tileCounts.get(t) || 0);
   if (cnt >= 4) return;
-  // 阻擋總張數超過 17
   const tot = totalCount();
   if (tot >= 17) return;
 
@@ -551,10 +559,24 @@ function buildRow(el, list){
     btn.textContent = UNICODE_TILES[code] || code;
     btn.title = code;
     btn.setAttribute('aria-label', code);
-    // 允許快速點選；避免雙擊放大：pointerdown + preventDefault
-    btn.addEventListener('pointerdown',(e)=>{ e.preventDefault(); insertText(code); }, {passive:false});
-    // 備援 click（桌面）
-    btn.addEventListener('click',(e)=>{ e.preventDefault(); insertText(code); });
+
+    // 觸控：pointerdown 直接處理，並記錄時間；避免雙擊放大
+    btn.addEventListener('pointerdown',(e)=>{
+      if(e.pointerType === 'touch'){
+        e.preventDefault();
+        lastTouchTime = Date.now();
+        insertText(code);
+      }
+    }, {passive:false});
+
+    // 滑鼠/鍵盤：只用 click，一次觸發
+    btn.addEventListener('click',(e)=>{
+      // 若剛剛是觸控，忽略這個 click（在行動裝置上避免多次）
+      if (Date.now() - lastTouchTime < TOUCH_CLICK_GUARD_MS) { e.preventDefault(); return; }
+      e.preventDefault();
+      insertText(code);
+    });
+
     el.appendChild(btn);
   }
 }
@@ -590,8 +612,6 @@ function sortTilesByKeyboardOrder(arr){
     const oa = suitOrder[sa] ?? 99;
     const ob = suitOrder[sb] ?? 99;
     if(oa !== ob) return oa - ob;
-
-    // 同花色：數字小到大；字牌 1–7；X 已分在最後不進此分支
     const na = a === 'X' ? 0 : parseInt(a[0],10);
     const nb = b === 'X' ? 0 : parseInt(b[0],10);
     return na - nb;
@@ -605,7 +625,6 @@ document.getElementById('btnSort').addEventListener('click', ()=>{
     fireFormat();
     updateKeyboardState();
   }catch(e){
-    // 若輸入有誤（例如超過 17 張等），給個溫和提示
     const toast = document.getElementById('toast');
     toast.textContent = '無法整理：' + e.message;
     toast.classList.add('show');
@@ -621,7 +640,6 @@ function fireFormat(){
     recountFromInput();
     updateKeyboardState();
   }catch(e){
-    // 若是超過 17 張等錯誤，這裡不擾民，只更新鍵盤狀態
     recountFromInput();
     updateKeyboardState();
   }
