@@ -1,4 +1,4 @@
-<!doctype html>
+<!doctype html> 
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8" />
@@ -20,6 +20,7 @@
       font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Noto Sans, Arial, "Apple Color Emoji", "Segoe UI Emoji";
       color:#fff;
       background: radial-gradient(1200px 800px at 10% 10%, #0f1a33 10%, #0b1220 60%);
+      -webkit-text-size-adjust: 100%;
     }
     .wrap { min-height:100dvh; display:flex; flex-direction:column; }
     .container { width:100%; max-width:980px; margin:0 auto; padding:12px clamp(10px,4vw,20px) 96px; box-sizing:border-box; }
@@ -92,9 +93,16 @@
       font-weight:800; font-size:var(--tile-size);
       user-select:none; -webkit-tap-highlight-color:transparent;
       min-width:0;
+      -ms-touch-action: manipulation; touch-action: manipulation; /* 快速點選不放大 */
     }
     .key:active { transform:scale(.98); }
     .key.util{ font-size:14px; font-weight:700; background:#11213f; }
+
+    /* 鎖滿 4 張後的灰階樣式 */
+    .key[disabled]{
+      opacity:.5; filter:grayscale(.85);
+      cursor:not-allowed;
+    }
 
     /* 工具列：使用 9 欄，三顆鍵各佔 3 欄（= 3 個一般鍵寬度） */
     .kbd.tools{ grid-template-columns: repeat(9, 1fr); }
@@ -406,23 +414,59 @@ btnBackToMain.addEventListener('click', showMain);
 const tilesInput=$('#tilesInput');
 const resultEl=$('#result');
 const unicodeHandEl=$('#unicodeHand');
-const toast=$('#toast');
 const actionsEl=$('#resultActions');
 
 function setResult(t){ resultEl.textContent=t }
 function setUnicodeHand(arr){
   unicodeHandEl.innerHTML = arr.length ? ('當前手牌： ' + formatHand(arr)) : '';
 }
-function insertText(t){ const cur=tilesInput.value; tilesInput.value=(cur?cur.replace(/\s+$/,'')+' ':'')+t; fireFormat(false) }
+function insertText(t){
+  // 檢查是否已達 4 張
+  const cnt = (tileCounts.get(t) || 0);
+  if (cnt >= 4) return;
+  const cur=tilesInput.value;
+  tilesInput.value=(cur?cur.replace(/\s+$/,'')+' ':'')+t+' ';
+  tileCounts.set(t, cnt+1);
+  fireFormat();
+  updateKeyboardState();
+}
+
+/* ======= 牌面按鈕 4 張上限 ======= */
+const tileCounts = new Map(); // 依輸入即時計數
+
+function recountFromInput(){
+  tileCounts.clear();
+  try {
+    const tiles = parseTiles(tilesInput.value);
+    for (const x of tiles) tileCounts.set(x, (tileCounts.get(x)||0)+1);
+  } catch(e) {
+    // 無效中間狀態：忽略，不更新
+  }
+}
+
+function updateKeyboardState(){
+  document.querySelectorAll('.kbd .key[data-tile]').forEach(btn=>{
+    const code = btn.dataset.tile;
+    const cnt = tileCounts.get(code) || 0;
+    btn.disabled = cnt >= 4;
+    btn.setAttribute('aria-disabled', btn.disabled ? 'true':'false');
+  });
+}
 
 /* 建鍵盤 */
 function buildRow(el, list){
   for(const code of list){
     const btn=document.createElement('button');
-    btn.className='key'; btn.type='button'; btn.dataset.tile=code;
+    btn.className='key';
+    btn.type='button';
+    btn.dataset.tile=code;
     btn.textContent = UNICODE_TILES[code] || code;
-    btn.title = code; btn.setAttribute('aria-label', code);
-    btn.addEventListener('click', ()=> insertText(code + ' '));
+    btn.title = code;
+    btn.setAttribute('aria-label', code);
+    // 允許快速點選；避免雙擊放大：用 pointerdown 並阻止預設
+    btn.addEventListener('pointerdown',(e)=>{ e.preventDefault(); insertText(code); }, {passive:false});
+    // 備援 click（桌面）
+    btn.addEventListener('click',(e)=>{ e.preventDefault(); insertText(code); });
     el.appendChild(btn);
   }
 }
@@ -432,14 +476,37 @@ buildRow(document.getElementById('row-m'), Array.from({length:9},(_,i)=>`${i+1}m
 buildRow(document.getElementById('row-z'), [...Array.from({length:7},(_,i)=>`${i+1}z`), 'X']);
 
 /* 工具鍵（清空｜空格｜退格；各自寬度=3 鍵） */
-document.getElementById('keyClear').addEventListener('click',()=>{ tilesInput.value=''; setUnicodeHand([]); setResult(''); actionsEl.style.display='none'; })
-document.getElementById('keySpace').addEventListener('click',()=>{ tilesInput.value = tilesInput.value.replace(/\s*$/, ' ') })
-document.getElementById('keyBack').addEventListener('click',()=>{ tilesInput.value = tilesInput.value.trimEnd().replace(/\S+\s*$|.$/,''); fireFormat(false) })
+document.getElementById('keyClear').addEventListener('click',()=>{
+  tilesInput.value=''; setUnicodeHand([]); setResult(''); actionsEl.style.display='none';
+  tileCounts.clear();
+  updateKeyboardState();
+});
+document.getElementById('keySpace').addEventListener('click',()=>{
+  tilesInput.value = tilesInput.value.replace(/\s*$/, ' ');
+});
+document.getElementById('keyBack').addEventListener('click',()=>{
+  // 移除最後一個 token（含尾隨空白）
+  const before = tilesInput.value;
+  const after = before.trimEnd().replace(/\S+\s*$|.$/,'');
+  tilesInput.value = after;
+  // 重新計數並更新
+  recountFromInput();
+  fireFormat();
+  updateKeyboardState();
+});
 
-/* 即時格式化（保留體驗） */
+/* 即時格式化（也會同步鍵盤狀態） */
 function fireFormat(){
-  try{ const tiles=parseTiles(tilesInput.value); setUnicodeHand(tiles); }
-  catch(e){ /* 輸入中暫不提示錯誤 */ }
+  try{
+    const tiles=parseTiles(tilesInput.value);
+    setUnicodeHand(tiles);
+    recountFromInput();
+    updateKeyboardState();
+  }catch(e){
+    // 輸入中暫不提示錯誤；仍可更新鍵盤（以當前可解析部分為準）
+    recountFromInput();
+    updateKeyboardState();
+  }
 }
 
 /* 自動分析：完成後捲到分析結果並顯示操作鈕 */
@@ -475,23 +542,32 @@ document.getElementById('btnCheck').addEventListener('click',()=>{
   }
 });
 
-/* 分析結果旁的操作按鈕 —— 手機不彈出鍵盤（移除 focus/選取） */
+/* 分析結果旁的操作按鈕 —— 不自動 focus，避免手機彈出鍵盤 */
 document.getElementById('btnEdit').addEventListener('click',()=>{
-  showMain();            // 回到輸入頁，不主動 focus
+  pageMain.classList.add('active'); pageRules.classList.remove('active');
+  btnBackToMain.style.display='none'; btnToRules.style.display='';
+  dock.style.display='';
 });
 document.getElementById('btnReenter').addEventListener('click',()=>{
-  tilesInput.value='';   // 清空
-  setUnicodeHand([]); setResult(''); actionsEl.style.display='none';
-  showMain();            // 回到輸入頁，不主動 focus
+  tilesInput.value=''; setUnicodeHand([]); setResult(''); actionsEl.style.display='none';
+  tileCounts.clear(); updateKeyboardState();
+  pageMain.classList.add('active'); pageRules.classList.remove('active');
+  btnBackToMain.style.display='none'; btnToRules.style.display='';
+  dock.style.display='';
 });
 
-/* 取消雙擊放大（保險） */
+/* ==== 手機快速點選不放大：全域保險 ==== */
+document.addEventListener('dblclick', (e)=>{ e.preventDefault(); }, {passive:false});
 let lastTouchEnd = 0;
 document.addEventListener('touchend', function (e) {
   const now = Date.now();
   if (now - lastTouchEnd <= 300) { e.preventDefault(); }
   lastTouchEnd = now;
 }, { passive:false });
+
+/* 初始狀態 */
+recountFromInput();
+updateKeyboardState();
 
 /* 輸入時延遲格式化 */
 let typingTimer; 
