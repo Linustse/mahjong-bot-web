@@ -27,10 +27,12 @@
     .title { font-size:clamp(18px,4.8vw,26px); font-weight:800; letter-spacing:.3px; }
 
     .card {
+      position:relative;
       background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
       border:1px solid rgba(255,255,255,.12);
       border-radius:16px; padding:var(--card-pad);
       box-shadow:0 10px 30px rgba(0,0,0,.25);
+      overflow:visible; /* 確保內部展開時不會看起來溢出邊框 */
     }
 
     .section-title{ font-size:12px; color:#fff; text-transform:uppercase; letter-spacing:.16em; margin:6px 0 8px; }
@@ -53,7 +55,7 @@
     input[type=text]:focus{ border-color:#60a5fa; box-shadow:0 0 0 3px rgba(96,165,250,.28); }
 
     /* 可展開輸入面板（預設關閉） */
-    .input-panel{ display:none; margin-top:8px; }
+    .input-panel{ display:none; margin-top:8px; width:100%; }
     .input-panel.active{ display:block; }
 
     .btn {
@@ -70,7 +72,6 @@
       border:none; color:#fff;
     }
     .btn.ghost{ background:transparent; border:1px dashed rgba(255,255,255,.3); }
-
     .btn.sm{ font-size:14px; padding:8px 10px; min-height:36px; }
 
     .dock {
@@ -82,7 +83,7 @@
     .dock-row{ display:flex; gap:8px; }
     .dock .btn { flex:1; min-height:48px; font-size:16px; }
 
-    /* 自動分析上方的「修改／重新輸入」：輸出後才顯示 */
+    /* 自動分析上方的「修改／重新輸入」：依規則顯示 */
     .dock-aux{ display:none; }
     .dock-aux.show{ display:flex; }
 
@@ -112,22 +113,23 @@
 
     .row-title { margin-top:8px; font-size:13px; opacity:.9; }
 
-    /* ===== 當前手牌：緊湊化（減少邊框/間距，限制行數） ===== */
+    /* ===== 當前手牌：固定 2 行＋白色線圈，不截斷（可捲動） ===== */
     .hand-wrap{ scroll-margin-top:72px; } /* 供「修改」捲回定位 */
     .hand{
       display:flex; align-items:center; flex-wrap:wrap;
-      gap:4px; padding:2px 4px; border-radius:10px;
-      max-height: calc(3 * (var(--tile-size) * 1.35)); /* 約 3 行 */
-      overflow:hidden;
-    }
-    @media (max-width: 480px){
-      .hand{ max-height: calc(2 * (var(--tile-size) * 1.35)); } /* 手機約 2 行 */
+      gap:4px; padding:6px 8px; border-radius:12px;
+      outline:2px solid #fff; outline-offset:0; box-shadow:0 0 0 3px rgba(255,255,255,.15) inset;
+      /* 行高以單張字磚約 1.35 倍估算 */
+      min-height: calc(2 * (var(--tile-size) * 1.35));
+      max-height: calc(2 * (var(--tile-size) * 1.35));
+      overflow:auto;  /* 不截斷，提供捲動 */
+      background: rgba(255,255,255,.03);
     }
     .hand-label{ font-size:14px; opacity:.95; margin-right:4px; }
     .hand-btn{
       background: transparent;
       border: none;
-      padding: 1px;                 /* 幾乎無邊框面積 */
+      padding: 1px;
       font-size: calc(var(--tile-size) * 1.2);
       line-height: 1.05;
       color:#fff;
@@ -137,6 +139,9 @@
     }
     .hand-btn:active{ transform: scale(.96); }
     .hand-btn:focus{ outline: none; }
+
+    /* 分析結果底部留白，避免被 Dock 遮住（用 JS 動態調整高度） */
+    #resultSpacer{ height:0; }
 
     #result { font-size: var(--tile-size); line-height:1.55; white-space:pre-wrap; }
 
@@ -158,11 +163,11 @@
 
       <!-- 主頁 -->
       <section id="page-main" class="page active">
-        <div class="card">
+        <div class="card" id="card-input">
           <div class="section-title">輸入手牌</div>
 
           <!-- 控制列：清空（左）｜顯示輸入欄（中）｜整理（右） -->
-          <div class="field" style="margin-bottom:8px">
+          <div class="field" id="controlRow" style="margin-bottom:8px">
             <button class="btn sm" id="btnClearTop" type="button" title="清空輸入">清空</button>
 
             <div class="spacer"></div>
@@ -172,14 +177,14 @@
             <button class="btn sm" id="btnSort" type="button" title="依鍵盤順序整理">整理</button>
           </div>
 
-          <!-- 可展開輸入面板（預設隱藏） -->
+          <!-- 可展開輸入面板（預設隱藏，寬度鎖定在卡片內） -->
           <div id="inputPanel" class="input-panel">
             <input id="tilesInput" type="text" inputmode="latin" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="輸入牌組或使用下方牌面鍵盤" />
           </div>
 
-          <!-- 當前手牌（緊湊 & 高度限制） -->
+          <!-- 當前手牌（固定 2 行 + 白圈） -->
           <div id="handWrap" class="hand-wrap">
-            <div id="unicodeHand" class="muted" style="min-height:28px;margin-bottom:8px"></div>
+            <div id="unicodeHand" class="muted" style="margin-bottom:8px"></div>
           </div>
 
           <div class="section-title">快速輸入鍵盤</div>
@@ -201,6 +206,7 @@
         <div class="card" style="margin-top:12px">
           <div class="section-title">分析結果</div>
           <div id="result" aria-live="polite"></div>
+          <div id="resultSpacer"></div>
         </div>
       </section>
 
@@ -220,7 +226,7 @@
 
     </div>
 
-    <!-- 底部 Dock：先顯示（修改／重新輸入在上方，之後是自動分析） -->
+    <!-- 底部 Dock：上方是修改／重新輸入，底下是自動分析 -->
     <div class="dock" id="dock">
       <div class="dock-inner">
         <div class="dock-row dock-aux" id="dockAux">
@@ -446,8 +452,10 @@ const inputPanel=$('#inputPanel');
 const btnToggleInput=$('#btnToggleInput');
 
 const resultEl=$('#result');
+const resultSpacer=$('#resultSpacer');
 const unicodeHandEl=$('#unicodeHand');
 
+const controlRow=$('#controlRow');
 const dockAux=$('#dockAux');
 const btnEditFloat=$('#btnEditFloat');
 const btnReenterFloat=$('#btnReenterFloat');
@@ -468,16 +476,16 @@ btnBackToMain.addEventListener('click', showMain);
 
 function setResult(t){ resultEl.textContent=t }
 
-/* 展開 / 收合輸入面板 */
+/* 展開 / 收合輸入面板（保持在卡片內） */
 btnToggleInput.addEventListener('click', ()=>{
   const open = !inputPanel.classList.contains('active');
   inputPanel.classList.toggle('active', open);
   btnToggleInput.setAttribute('aria-expanded', open?'true':'false');
   btnToggleInput.textContent = open ? '隱藏輸入欄' : '顯示輸入欄';
-  if(open){ tilesInput && tilesInput.focus(); }
+  if(open && tilesInput){ tilesInput.focus(); }
 });
 
-/* 手牌渲染（緊湊） */
+/* 手牌渲染（固定 2 行 + 白圈，不截斷） */
 function renderHandButtons(arr){
   if(!arr.length){ unicodeHandEl.innerHTML=''; return; }
   let html = `<div class="hand"><span class="hand-label">當前手牌：</span>`;
@@ -580,7 +588,7 @@ document.getElementById('btnSort').addEventListener('click', ()=>{
     writeTiles(sorted);
     fireFormat();
     updateKeyboardState();
-    hideDockAux(); // 按下整理後隱藏
+    // 不直接隱藏 dockAux，交由可視邏輯判定
   }catch(e){
     showToast('無法整理：' + e.message);
   }
@@ -592,7 +600,7 @@ document.getElementById('btnClearTop').addEventListener('click',()=>{
   setUnicodeHand([]); setResult('');
   tileCounts.clear();
   updateKeyboardState();
-  hideDockAux(); // 按下清空後隱藏
+  updateDockAuxVisibility(); // 依規則更新顯示
 });
 
 /* 寫回輸入框 */
@@ -613,7 +621,7 @@ function fireFormat(){
   }
 }
 
-/* 自動分析：輸出後顯示 Dock 上方的修改/重新輸入（藍灰） */
+/* 自動分析：完成後更新結果、顯示邏輯與底部留白 */
 document.getElementById('btnCheck').addEventListener('click',()=>{
   try{
     const tiles=parseTiles(tilesInput.value); const n=tiles.length; setUnicodeHand(tiles);
@@ -638,30 +646,57 @@ document.getElementById('btnCheck').addEventListener('click',()=>{
       setResult('錯誤：牌張數不合法（小相公/大相公）。');
     }
 
-    showDockAux(); // 顯示「修改／重新輸入」
+    adjustResultSpacer();
+    updateDockAuxVisibility();                 // 依可視性規則決定是否顯示修改/重新輸入
     document.getElementById('result').scrollIntoView({ behavior:'smooth', block:'start' });
 
   }catch(e){
     setResult('錯誤：'+e.message);
-    hideDockAux();
+    adjustResultSpacer();
+    updateDockAuxVisibility();
   }
 });
 
 /* Dock 上方操作：修改（捲回手牌/鍵盤）、重新輸入（清空） */
-function showDockAux(){ dockAux.classList.add('show'); }
-function hideDockAux(){ dockAux.classList.remove('show'); }
-
 btnEditFloat.addEventListener('click', ()=>{
   document.getElementById('handWrap').scrollIntoView({ behavior:'smooth', block:'start' });
-  hideDockAux(); // 要求：按下後消失
-  // 不聚焦輸入欄；僅捲回位置
 });
 btnReenterFloat.addEventListener('click', ()=>{
   tilesInput.value='';
   setUnicodeHand([]); setResult('');
   tileCounts.clear(); updateKeyboardState();
-  hideDockAux(); // 要求：按下後消失
+  adjustResultSpacer();
+  updateDockAuxVisibility();
 });
+
+/* ------------- 顯示邏輯：有結果 → 若控制列可見則隱藏，否則顯示 ------------- */
+let controlRowVisible = false;
+const io = new IntersectionObserver(entries=>{
+  controlRowVisible = entries[0]?.isIntersecting ?? false;
+  updateDockAuxVisibility();
+}, { root:null, threshold:0.01 });
+io.observe(controlRow);
+
+function hasResult(){
+  return (resultEl.textContent || '').trim().length > 0;
+}
+function showDockAux(){ dockAux.classList.add('show'); }
+function hideDockAux(){ dockAux.classList.remove('show'); }
+function updateDockAuxVisibility(){
+  if(!hasResult()){ hideDockAux(); return; }
+  // 有分析結果：控制列出現在畫面內就隱藏，其餘時候顯示
+  if(controlRowVisible){ hideDockAux(); }
+  else { showDockAux(); }
+}
+
+/* 分析結果底部留白：避免被 Dock 遮住（依 Dock 高度動態設定） */
+function adjustResultSpacer(){
+  const dockHeight = dock?.offsetHeight || 0;
+  const auxShown = dockAux.classList.contains('show');
+  // 留白覆蓋自動分析行 + 可能的 aux 行
+  const extra = auxShown ? dockHeight : Math.max(dockHeight - 56, 0);
+  resultSpacer.style.height = hasResult() ? (dockHeight + extra + 16) + 'px' : '0px';
+}
 
 /* 輔助：吐司 */
 function showToast(msg){
@@ -684,14 +719,19 @@ function init(){
   recountFromInput();
   updateKeyboardState();
   fireFormat();
+  adjustResultSpacer();
+  updateDockAuxVisibility();
 }
 init();
 
 /* 輸入時延遲格式化 */
 let typingTimer; 
 document.getElementById('tilesInput').addEventListener('input',()=>{
-  clearTimeout(typingTimer); typingTimer=setTimeout(()=>fireFormat(), 120)
+  clearTimeout(typingTimer); typingTimer=setTimeout(()=>{ fireFormat(); adjustResultSpacer(); updateDockAuxVisibility(); }, 120)
 });
+
+/* 視窗大小改變時，更新底部留白 */
+window.addEventListener('resize', ()=>{ adjustResultSpacer(); updateDockAuxVisibility(); });
 </script>
 </body>
 </html>
