@@ -32,7 +32,7 @@
       border:1px solid rgba(255,255,255,.12);
       border-radius:16px; padding:var(--card-pad);
       box-shadow:0 10px 30px rgba(0,0,0,.25);
-      overflow:visible;
+      overflow:visible; /* 確保內部展開時不會看起來溢出邊框 */
     }
 
     .section-title{ font-size:12px; color:#fff; text-transform:uppercase; letter-spacing:.16em; margin:6px 0 8px; }
@@ -43,23 +43,20 @@
     .field { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
     .field .spacer{ flex:1 1 auto; }
 
-    /* 讓輸入欄寬度依 JS 設定的 max-width，自身不硬撐整行 */
-    .input-panel{ display:none; margin-top:8px; width:100%; }
-    .input-panel.active{ display:block; }
-    .input-panel-inner{ width:100%; display:flex; }
     input[type=text]{
-      width:auto;                 /* 由 JS 設定 max-width，避免拉滿 */
-      max-width:100%;
-      box-sizing:border-box;
+      width:100%;
       min-height:44px;
       background:#0b1020; color:#fff;
       border:1px solid rgba(255,255,255,.25);
       padding:10px 12px; border-radius:12px; font-size:16px; outline:none;
       -ms-touch-action: manipulation; touch-action: manipulation;
-      display:block;
     }
     input[type=text]::placeholder { color:#ffffffcc; }
     input[type=text]:focus{ border-color:#60a5fa; box-shadow:0 0 0 3px rgba(96,165,250,.28); }
+
+    /* 可展開輸入面板（預設關閉） */
+    .input-panel{ display:none; margin-top:8px; width:100%; }
+    .input-panel.active{ display:block; }
 
     .btn {
       background:#0d2347; border:1px solid rgba(255,255,255,.25);
@@ -71,7 +68,7 @@
     .btn:hover { border-color:#60a5fa; }
     .btn.primary{ background:linear-gradient(135deg, #2563eb, #22c55e); border:none; color:white; }
     .btn.secondary{
-      background: linear-gradient(135deg, #4b74c7, #334155);
+      background: linear-gradient(135deg, #4b74c7, #334155); /* 藍灰 */
       border:none; color:#fff;
     }
     .btn.ghost{ background:transparent; border:1px dashed rgba(255,255,255,.3); }
@@ -86,16 +83,18 @@
     .dock-row{ display:flex; gap:8px; }
     .dock .btn { flex:1; min-height:48px; font-size:16px; }
 
+    /* 自動分析上方的「修改／重新輸入」：依規則顯示 */
     .dock-aux{ display:none; }
     .dock-aux.show{ display:flex; }
 
     .toast { position:fixed; left:50%; transform:translateX(-50%); bottom:76px; background:#1f2937; color:#fff; padding:10px 14px; border-radius:12px; font-size:14px; opacity:0; pointer-events:none; transition:.25s; z-index:60; }
     .toast.show{ opacity:1; }
 
+    /* 兩頁面切換 */
     .page{ display:none; }
     .page.active{ display:block; }
 
-    /* 鍵盤 */
+    /* 鍵盤：固定 10 欄 */
     .kbd{ display:grid; grid-template-columns: repeat(10, 1fr); gap: var(--gap-small); }
     .row { margin-top:8px; }
     .key{
@@ -114,15 +113,16 @@
 
     .row-title { margin-top:8px; font-size:13px; opacity:.9; }
 
-    /* 當前手牌：固定 2 行＋白圈，可滾動 */
-    .hand-wrap{ scroll-margin-top:72px; }
+    /* ===== 當前手牌：固定 2 行＋白色線圈，不截斷（可捲動） ===== */
+    .hand-wrap{ scroll-margin-top:72px; } /* 供「修改」捲回定位 */
     .hand{
       display:flex; align-items:center; flex-wrap:wrap;
       gap:4px; padding:6px 8px; border-radius:12px;
       outline:2px solid #fff; outline-offset:0; box-shadow:0 0 0 3px rgba(255,255,255,.15) inset;
+      /* 行高以單張字磚約 1.35 倍估算 */
       min-height: calc(2 * (var(--tile-size) * 1.35));
       max-height: calc(2 * (var(--tile-size) * 1.35));
-      overflow:auto;
+      overflow:auto;  /* 不截斷，提供捲動 */
       background: rgba(255,255,255,.03);
     }
     .hand-label{ font-size:14px; opacity:.95; margin-right:4px; }
@@ -140,7 +140,9 @@
     .hand-btn:active{ transform: scale(.96); }
     .hand-btn:focus{ outline: none; }
 
+    /* 分析結果底部留白，避免被 Dock 遮住（用 JS 動態調整高度） */
     #resultSpacer{ height:0; }
+
     #result { font-size: var(--tile-size); line-height:1.55; white-space:pre-wrap; }
 
     .chips{ display:none !important; }
@@ -150,6 +152,7 @@
   <div class="wrap">
     <div class="container">
 
+      <!-- 頂部：標題 + 規則/返回按鈕 -->
       <div class="topbar">
         <div class="title">港式台灣麻雀分析器 · 網頁版</div>
         <div>
@@ -158,23 +161,25 @@
         </div>
       </div>
 
+      <!-- 主頁 -->
       <section id="page-main" class="page active">
         <div class="card" id="card-input">
           <div class="section-title">輸入手牌</div>
 
+          <!-- 控制列：清空（左）｜顯示輸入欄（中）｜整理（右） -->
           <div class="field" id="controlRow" style="margin-bottom:8px">
             <button class="btn sm" id="btnClearTop" type="button" title="清空輸入">清空</button>
+
             <div class="spacer"></div>
             <button class="btn sm ghost" id="btnToggleInput" type="button" aria-expanded="false" aria-controls="inputPanel">顯示輸入欄</button>
+
             <div class="spacer"></div>
             <button class="btn sm" id="btnSort" type="button" title="依鍵盤順序整理">整理</button>
           </div>
 
-          <!-- 輸入面板：在這裡會把 input 實際寬度對齊到手牌白框寬度 -->
+          <!-- 可展開輸入面板（預設隱藏，寬度鎖定在卡片內） -->
           <div id="inputPanel" class="input-panel">
-            <div class="input-panel-inner">
-              <input id="tilesInput" type="text" inputmode="latin" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="輸入牌組或使用下方牌面鍵盤" />
-            </div>
+            <input id="tilesInput" type="text" inputmode="latin" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="輸入牌組或使用下方牌面鍵盤" />
           </div>
 
           <!-- 當前手牌（固定 2 行 + 白圈） -->
@@ -197,6 +202,7 @@
           <div class="kbd row" id="row-z"></div>
         </div>
 
+        <!-- 分析結果 -->
         <div class="card" style="margin-top:12px">
           <div class="section-title">分析結果</div>
           <div id="result" aria-live="polite"></div>
@@ -204,6 +210,7 @@
         </div>
       </section>
 
+      <!-- 規則頁 -->
       <section id="page-rules" class="page">
         <div class="card">
           <div class="section-title">規則</div>
@@ -219,6 +226,7 @@
 
     </div>
 
+    <!-- 底部 Dock：上方是修改／重新輸入，底下是自動分析 -->
     <div class="dock" id="dock">
       <div class="dock-inner">
         <div class="dock-row dock-aux" id="dockAux">
@@ -235,24 +243,29 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
-/* ======= Mahjong 核心（維持不變） ======= */
+/* ======= Mahjong 核心 ======= */
 const SUITS=['m','t','s']; const HONORS=['1z','2z','3z','4z','5z','6z','7z']; const JOKER='X';
 const VALID_WIN=new Set([5,8,11,14,17]); const VALID_TING=new Set([4,7,10,13,16]);
+
 const UNICODE_TILES={
   '1m':'🀇','2m':'🀈','3m':'🀉','4m':'🀊','5m':'🀋','6m':'🀌','7m':'🀍','8m':'🀎','9m':'🀏',
   '1t':'🀙','2t':'🀚','3t':'🀛','4t':'🀜','5t':'🀝','6t':'🀞','7t':'🀟','8t':'🀠','9t':'🀡',
   '1s':'🀐','2s':'🀑','3s':'🀒','4s':'🀓','5s':'🀔','6s':'🀕','7s':'🀖','8s':'🀗','9s':'🀘',
   '1z':'🀀','2z':'🀁','3z':'🀂','4z':'🀃','5z':'🀄︎','6z':'🀅','7z':'🀆','X':'🀪'
 };
+
 function formatTile(t){ return UNICODE_TILES[t]||t }
 function normalizeInput(s){ return s.normalize('NFKC').trim() }
 function validateCounts(tiles){
   const c=new Map(); for(const t of tiles){ c.set(t,(c.get(t)||0)+1) }
   for(const [t,count] of c){ if(t!=='X' && count>4) throw new Error(`牌 ${t} 數量超過4張，請檢查輸入。`) }
 }
+
+/* 解析輸入；限制最多 17 張 */
 function parseTiles(input){
   let parts=normalizeInput(input); if(!parts) return [];
   let tokens=parts.split(/\s+/).filter(Boolean);
+
   if(tokens.length===1){
     const s=tokens[0]; const out=[];
     for(let i=0;i<s.length;){
@@ -278,6 +291,7 @@ function parseTiles(input){
     if(out.length>17) throw new Error(`牌張數最多 17 張，目前為 ${out.length} 張`);
     return out;
   }
+
   const res=[];
   for(const tk of tokens){
     if(tk.toUpperCase()==='X'){ res.push('X'); if(res.length>17) throw new Error(`牌張數最多 17 張，目前已達 ${res.length} 張`); continue }
@@ -303,6 +317,7 @@ function parseTiles(input){
   if(res.length>17) throw new Error(`牌張數最多 17 張，目前為 ${res.length} 張`);
   return res;
 }
+
 function isTriplet(trio){ return trio.length===3 && trio[0]===trio[1] && trio[1]===trio[2] }
 function isSequence(trio){
   if(trio.length!==3) return false;
@@ -445,19 +460,6 @@ const dockAux=$('#dockAux');
 const btnEditFloat=$('#btnEditFloat');
 const btnReenterFloat=$('#btnReenterFloat');
 
-/* --- 新增：將輸入欄寬度對齊到「當前手牌」白框的最大寬度 --- */
-function syncInputWidthToHand(){
-  // 取白框 .hand，若尚未渲染則退而求其次用 unicodeHand 容器寬度
-  const handBox = unicodeHandEl.querySelector('.hand') || unicodeHandEl;
-  const w = handBox ? Math.floor(handBox.getBoundingClientRect().width) : 0;
-  if (w > 0) {
-    tilesInput.style.maxWidth = w + 'px';
-  } else {
-    tilesInput.style.maxWidth = ''; // 使用預設
-  }
-}
-
-/* 頁面切換 */
 function showMain(){
   pageMain.classList.add('active'); pageRules.classList.remove('active');
   btnBackToMain.style.display='none'; btnToRules.style.display='';
@@ -474,28 +476,24 @@ btnBackToMain.addEventListener('click', showMain);
 
 function setResult(t){ resultEl.textContent=t }
 
-/* 展開 / 收合輸入面板（保持在卡片內，並同步寬度） */
+/* 展開 / 收合輸入面板（保持在卡片內） */
 btnToggleInput.addEventListener('click', ()=>{
   const open = !inputPanel.classList.contains('active');
   inputPanel.classList.toggle('active', open);
   btnToggleInput.setAttribute('aria-expanded', open?'true':'false');
   btnToggleInput.textContent = open ? '隱藏輸入欄' : '顯示輸入欄';
-  if(open && tilesInput){
-    syncInputWidthToHand();   // 展開時對齊一次
-    tilesInput.focus();
-  }
+  if(open && tilesInput){ tilesInput.focus(); }
 });
 
-/* 手牌渲染 */
+/* 手牌渲染（固定 2 行 + 白圈，不截斷） */
 function renderHandButtons(arr){
-  if(!arr.length){ unicodeHandEl.innerHTML=''; syncInputWidthToHand(); return; }
+  if(!arr.length){ unicodeHandEl.innerHTML=''; return; }
   let html = `<div class="hand"><span class="hand-label">當前手牌：</span>`;
   arr.forEach((t,i)=>{
     html += `<button class="hand-btn" type="button" data-idx="${i}" aria-label="刪除 ${t}" title="刪除 ${t}">${formatTile(t)}</button>`;
   });
   html += '</div>';
   unicodeHandEl.innerHTML = html;
-  syncInputWidthToHand();     // 每次手牌渲染後對齊
 }
 function setUnicodeHand(arr){ renderHandButtons(arr); }
 
@@ -515,7 +513,7 @@ unicodeHandEl.addEventListener('pointerup', (e)=>{
   }catch(_){}
 });
 
-/* 計數與鍵盤狀態 */
+/* 即時計數與鍵盤狀態 */
 const tileCounts = new Map();
 function totalCount(){ let sum = 0; for (const v of tileCounts.values()) sum += v; return sum; }
 function recountFromInput(){
@@ -590,17 +588,19 @@ document.getElementById('btnSort').addEventListener('click', ()=>{
     writeTiles(sorted);
     fireFormat();
     updateKeyboardState();
+    // 不直接隱藏 dockAux，交由可視邏輯判定
   }catch(e){
     showToast('無法整理：' + e.message);
   }
 });
 
-/* 清空 */
+/* 清空（位於整理左側） */
 document.getElementById('btnClearTop').addEventListener('click',()=>{
   tilesInput.value='';
   setUnicodeHand([]); setResult('');
   tileCounts.clear();
   updateKeyboardState();
+  updateDockAuxVisibility(); // 依規則更新顯示
 });
 
 /* 寫回輸入框 */
@@ -619,13 +619,13 @@ function fireFormat(){
     recountFromInput();
     updateKeyboardState();
   }
-  syncInputWidthToHand(); // 每次格式化後也對齊一次（避免字體/滾動造成寬度變化）
 }
 
-/* 自動分析（略，僅保留原邏輯） */
+/* 自動分析：完成後更新結果、顯示邏輯與底部留白 */
 document.getElementById('btnCheck').addEventListener('click',()=>{
   try{
     const tiles=parseTiles(tilesInput.value); const n=tiles.length; setUnicodeHand(tiles);
+
     if(VALID_TING.has(n)){
       const ting=analyzeTingTilesOnly(tiles);
       if(ting.length===0){ setResult('此牌組尚未聽牌。'); }
@@ -645,17 +645,57 @@ document.getElementById('btnCheck').addEventListener('click',()=>{
     }else{
       setResult('錯誤：牌張數不合法（小相公/大相公）。');
     }
+
     adjustResultSpacer();
+    updateDockAuxVisibility();                 // 依可視性規則決定是否顯示修改/重新輸入
+    document.getElementById('result').scrollIntoView({ behavior:'smooth', block:'start' });
+
   }catch(e){
     setResult('錯誤：'+e.message);
     adjustResultSpacer();
+    updateDockAuxVisibility();
   }
 });
 
-/* 分析結果底部留白 */
+/* Dock 上方操作：修改（捲回手牌/鍵盤）、重新輸入（清空） */
+btnEditFloat.addEventListener('click', ()=>{
+  document.getElementById('handWrap').scrollIntoView({ behavior:'smooth', block:'start' });
+});
+btnReenterFloat.addEventListener('click', ()=>{
+  tilesInput.value='';
+  setUnicodeHand([]); setResult('');
+  tileCounts.clear(); updateKeyboardState();
+  adjustResultSpacer();
+  updateDockAuxVisibility();
+});
+
+/* ------------- 顯示邏輯：有結果 → 若控制列可見則隱藏，否則顯示 ------------- */
+let controlRowVisible = false;
+const io = new IntersectionObserver(entries=>{
+  controlRowVisible = entries[0]?.isIntersecting ?? false;
+  updateDockAuxVisibility();
+}, { root:null, threshold:0.01 });
+io.observe(controlRow);
+
+function hasResult(){
+  return (resultEl.textContent || '').trim().length > 0;
+}
+function showDockAux(){ dockAux.classList.add('show'); }
+function hideDockAux(){ dockAux.classList.remove('show'); }
+function updateDockAuxVisibility(){
+  if(!hasResult()){ hideDockAux(); return; }
+  // 有分析結果：控制列出現在畫面內就隱藏，其餘時候顯示
+  if(controlRowVisible){ hideDockAux(); }
+  else { showDockAux(); }
+}
+
+/* 分析結果底部留白：避免被 Dock 遮住（依 Dock 高度動態設定） */
 function adjustResultSpacer(){
   const dockHeight = dock?.offsetHeight || 0;
-  resultSpacer.style.height = (resultEl.textContent.trim() ? dockHeight + 16 : 0) + 'px';
+  const auxShown = dockAux.classList.contains('show');
+  // 留白覆蓋自動分析行 + 可能的 aux 行
+  const extra = auxShown ? dockHeight : Math.max(dockHeight - 56, 0);
+  resultSpacer.style.height = hasResult() ? (dockHeight + extra + 16) + 'px' : '0px';
 }
 
 /* 輔助：吐司 */
@@ -665,25 +705,7 @@ function showToast(msg){
   setTimeout(()=>t.classList.remove('show'),1600);
 }
 
-/* 初始 */
-function init(){
-  recountFromInput();
-  updateKeyboardState();
-  fireFormat();
-  adjustResultSpacer();
-  syncInputWidthToHand();          // 首次對齊
-}
-init();
-
-/* 事件：輸入／resize 時也對齊一次 */
-let typingTimer; 
-document.getElementById('tilesInput').addEventListener('input',()=>{
-  clearTimeout(typingTimer);
-  typingTimer=setTimeout(()=>{ fireFormat(); adjustResultSpacer(); }, 120)
-});
-window.addEventListener('resize', ()=>{ syncInputWidthToHand(); });
-
-/* 其他：行為優化 */
+/* ====== 其他 ====== */
 document.addEventListener('dblclick', (e)=>{ e.preventDefault(); }, {passive:false});
 let lastTouchEnd = 0;
 document.addEventListener('touchend', function (e) {
@@ -691,6 +713,25 @@ document.addEventListener('touchend', function (e) {
   if (now - lastTouchEnd <= 300) { e.preventDefault(); }
   lastTouchEnd = now;
 }, { passive:false });
+
+/* 初始 */
+function init(){
+  recountFromInput();
+  updateKeyboardState();
+  fireFormat();
+  adjustResultSpacer();
+  updateDockAuxVisibility();
+}
+init();
+
+/* 輸入時延遲格式化 */
+let typingTimer; 
+document.getElementById('tilesInput').addEventListener('input',()=>{
+  clearTimeout(typingTimer); typingTimer=setTimeout(()=>{ fireFormat(); adjustResultSpacer(); updateDockAuxVisibility(); }, 120)
+});
+
+/* 視窗大小改變時，更新底部留白 */
+window.addEventListener('resize', ()=>{ adjustResultSpacer(); updateDockAuxVisibility(); });
 </script>
 </body>
 </html>
